@@ -2,3 +2,4 @@ build/
 cfg.out
 .idea/
 *.iml
+test_codes/
