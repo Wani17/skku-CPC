@@ -134,28 +134,61 @@ class BasicBlock {
 	}
 }
 
-
+/**
+ * Construct Control Flow Graph
+ */
 class CFG {
-	private final BasicBlock entryBlock;
-	private final BasicBlock exitBlock;
-	private final Map<Integer, BasicBlock> blocks = new TreeMap<>();
-	private final Map<BasicBlock, Integer> prunedBlockIdxes = new HashMap<>();
-	BasicBlock curBlock;
+	/** Function Components */
 
+	// function name
 	private final String funcName;
+
+	// return type
 	final List<String> retType = new ArrayList<>();
+
+	// arguments
 	final List<String> args = new ArrayList<>();
 
-	private Integer nextBlockId = 0;
-	private final Stack<BasicBlock> pastBlocks = new Stack<>();
-	private final Stack<BasicBlock> endBlocks = new Stack<>();
+
+	/** BasicBlocks in CFG */
+
+	// entry block of CFG
+	private final BasicBlock entryBlock;
+
+	// exit block of CFG
+	private final BasicBlock exitBlock;
+
+	// all basic blocks in CFG except entry and exit blocks
+	private final Map<Integer, BasicBlock> blocks = new TreeMap<>();
+
+	// next block id to be assigned
+	private int nextBlockId = 0;
+
+	/** Current BasicBlock in CFG */
+
+	// current basic block of CFG
+	private BasicBlock curBlock;
+
+	// stacks for segmented entry blocks
+	private final Stack<BasicBlock> segmentStartBlocks = new Stack<>();
+
+	// stacks for segmented exit blocks
+	private final Stack<BasicBlock> segmentEndBlocks = new Stack<>();
+
+
+	/** Pruned BasicBlock Idxes */
+
+	// mapping from BasicBlock to pruned block idx
+	private final Map<BasicBlock, Integer> prunedBlockIdxes = new HashMap<>();
+
+
 
 	CFG(String funcName) {
 		this.funcName = funcName;
 		entryBlock = new BasicBlock("entry");
 		exitBlock = new BasicBlock("exit");
 		curBlock = entryBlock;
-		endBlocks.push(exitBlock);
+		segmentEndBlocks.push(exitBlock);
 		addBlock(false);
 	}
 
@@ -164,21 +197,21 @@ class CFG {
 		BasicBlock pastBlock = curBlock;
 		curBlock = new BasicBlock(nextBlockId);
 
-        pastBlock.succs.remove(endBlocks.peek());
-		endBlocks.peek().preds.remove(pastBlock);
+        pastBlock.succs.remove(segmentEndBlocks.peek());
+		segmentEndBlocks.peek().preds.remove(pastBlock);
 
 		pastBlock.succs.add(curBlock);
 		curBlock.preds.add(pastBlock);
 
-		curBlock.succs.add(endBlocks.peek());
-		endBlocks.peek().preds.add(curBlock);
+		curBlock.succs.add(segmentEndBlocks.peek());
+		segmentEndBlocks.peek().preds.add(curBlock);
 
 		blocks.put(nextBlockId, curBlock);
 		nextBlockId++;
 
 		if(isEndBlock) {
-			pastBlocks.push(curBlock);
-			endBlocks.push(curBlock);
+			segmentStartBlocks.push(curBlock);
+			segmentEndBlocks.push(curBlock);
 		}
 	}
 
@@ -187,39 +220,39 @@ class CFG {
 		BasicBlock pastBlock = curBlock;
 		curBlock = new BasicBlock();
 
-		pastBlock.succs.remove(endBlocks.peek());
-		endBlocks.peek().preds.remove(pastBlock);
+		pastBlock.succs.remove(segmentEndBlocks.peek());
+		segmentEndBlocks.peek().preds.remove(pastBlock);
 
 		pastBlock.succs.add(curBlock);
 		curBlock.preds.add(pastBlock);
 
-		curBlock.succs.add(endBlocks.peek());
-		endBlocks.peek().preds.add(curBlock);
+		curBlock.succs.add(segmentEndBlocks.peek());
+		segmentEndBlocks.peek().preds.add(curBlock);
 
-		pastBlocks.push(curBlock);
-		pastBlocks.push(pastBlock);
-		endBlocks.push(curBlock);
+		segmentStartBlocks.push(curBlock);
+		segmentStartBlocks.push(pastBlock);
+		segmentEndBlocks.push(curBlock);
 		return false;
 	}
 
 	public void moveTopPast() {
-		curBlock = pastBlocks.peek();
+		curBlock = segmentStartBlocks.peek();
 	}
 
 	public boolean moveTopPastWithDeletion() {
-		if(pastBlocks.empty()) return true;
-		curBlock = pastBlocks.pop();
+		if(segmentStartBlocks.empty()) return true;
+		curBlock = segmentStartBlocks.pop();
 		return false;
 	}
 
 	public boolean moveTopEndWithDeletion() {
-		if(pastBlocks.empty() || endBlocks.empty() || pastBlocks.peek() != endBlocks.peek()) {
+		if(segmentStartBlocks.empty() || segmentEndBlocks.empty() || segmentStartBlocks.peek() != segmentEndBlocks.peek()) {
 			return true;
 		}
 
-		curBlock = endBlocks.peek();
-		endBlocks.pop();
-		pastBlocks.pop();
+		curBlock = segmentEndBlocks.peek();
+		segmentEndBlocks.pop();
+		segmentStartBlocks.pop();
 		if(curBlock.getName() == null) {
 			curBlock.setName(nextBlockId);
 			blocks.put(nextBlockId, curBlock);
@@ -485,6 +518,10 @@ class CFG {
 		}
 		printBlock(exitBlock);
 	}
+
+	BasicBlock getCurrentBlock() {
+		return curBlock;
+	}
 }
 
 class Global {
@@ -526,7 +563,7 @@ class CFAVisitor extends simpleCBaseVisitor<Void> {
 			global.lines.add(str);
 		}
 		else {
-			curCFG.curBlock.addLine(str);
+			curCFG.getCurrentBlock().addLine(str);
 		}
 	}
 
@@ -620,9 +657,9 @@ class CFAVisitor extends simpleCBaseVisitor<Void> {
 
 		curCFG.moveTopPast();
 
-		BasicBlock ifBlock = curCFG.curBlock;
+		BasicBlock ifBlock = curCFG.getCurrentBlock();
 		curCFG.addBlock(false);
-		ifBlock.setThenBlock(curCFG.curBlock);
+		ifBlock.setThenBlock(curCFG.getCurrentBlock());
 		if(ctx.stmt(0).getChild(0) instanceof simpleCParser.CompoundStmtContext) {
 			brackets++;
 		}
@@ -630,7 +667,7 @@ class CFAVisitor extends simpleCBaseVisitor<Void> {
 
 		curCFG.moveTopPast();
 		curCFG.addBlock(false);
-		ifBlock.setElseBlock(curCFG.curBlock);
+		ifBlock.setElseBlock(curCFG.getCurrentBlock());
 		if(ctx.stmt().size() >= 2) {
 			if(ctx.stmt(1).getChild(0) instanceof simpleCParser.CompoundStmtContext) {
 				brackets++;
@@ -662,9 +699,9 @@ class CFAVisitor extends simpleCBaseVisitor<Void> {
 			return null;
 		}
 
-		BasicBlock whileBlock = curCFG.curBlock;
+		BasicBlock whileBlock = curCFG.getCurrentBlock();
 		curCFG.addBlock(false);
-		whileBlock.setLoopEndBlock(curCFG.curBlock);
+		whileBlock.setLoopEndBlock(curCFG.getCurrentBlock());
 		return null;
 	}
 
@@ -702,9 +739,9 @@ class CFAVisitor extends simpleCBaseVisitor<Void> {
 		curCFG.moveTopPastWithDeletion();
 		curCFG.moveTopEndWithDeletion();
 		curCFG.moveTopEndWithDeletion();
-		BasicBlock forBlock = curCFG.curBlock;
+		BasicBlock forBlock = curCFG.getCurrentBlock();
 		curCFG.addBlock(false);
-		forBlock.setLoopEndBlock(curCFG.curBlock);
+		forBlock.setLoopEndBlock(curCFG.getCurrentBlock());
 		return null;
 	}
 
