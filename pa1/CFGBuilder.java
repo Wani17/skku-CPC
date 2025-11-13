@@ -6,98 +6,163 @@ import java.util.stream.Collectors;
 import org.antlr.v4.runtime.*;
 import org.antlr.v4.runtime.tree.*;
 
-class CFG {
-	static class Block {
-		private String name = null;
-		final List<String> lines = new ArrayList<>();
-		final LinkedHashSet<Block> preds = new LinkedHashSet<>();
-		final LinkedHashSet<Block> succs = new LinkedHashSet<>();
-		private boolean isEnd = false;
-		private Block thenBlock = null;
-		private Block elseBlock = null;
-		private Block loopEndBlock = null;
+/**
+ * Basic BasicBlock: Node of Control Flow Graph
+ */
+class BasicBlock {
+	/** Basic Components */
 
-		Block() {
+	// Name of BasicBlock. e.g. "entry", "exit", "0", "1", ...
+	private String name;
 
-		}
+	// codes that in BasicBlock
+	private final List<String> lines = new ArrayList<>();
 
-		Block(int number) {
-			name = Integer.toString(number);
-		}
+	// whether successor is exit block
+	private boolean isEnd = false;
 
-		Block(String name) {
-			this.name = name;
-		}
 
-		void setName(int number) {
-			this.name = Integer.toString(number);
-		}
+	/** Preds/Succs of current BasicBlock */
 
-		void setName(String name) {
-			this.name = name;
-		}
+	// predecessors of BasicBlocks
+	final LinkedHashSet<BasicBlock> preds = new LinkedHashSet<>();
 
-		String getName() {
-			return name;
-		}
+	// successors of BasicBlocks
+	final LinkedHashSet<BasicBlock> succs = new LinkedHashSet<>();
 
-		void addLine(String line) {
-			if(!isEnd)
-				lines.add(line);
-		}
 
-		void setThenBlock(Block block) {
-			thenBlock = block;
-		}
+	/** Next Block of If/For/While statement */
 
-		void setElseBlock(Block block) {
-			elseBlock = block;
-		}
+	// then block of if statement (only this block is if statement)
+	private BasicBlock thenBlock = null;
 
-		void setLoopEndBlock(Block block) {
-			loopEndBlock = block;
-		}
+	// else block of if statement (only this block is if statement)
+	private BasicBlock elseBlock = null;
 
-		Block getThenBlock() {
-			return thenBlock;
-		}
+	// loop end block of for/while statement (only this block is for/while statement)
+	private BasicBlock loopEndBlock = null;
 
-		Block getElseBlock() {
-			return elseBlock;
-		}
 
-		Block getLoopEndBlock() {
-			return loopEndBlock;
-		}
+	/**
+	 * Add a line to BasicBlock
+	 *
+	 * @param line		line that in code of BasicBlock to be added
+	 */
+	void addLine(String line) {
+		if(!isEnd)
+			lines.add(line);
 	}
 
-	private final Block entryBlock;
-	private final Block exitBlock;
-	private final Map<Integer, Block> blocks = new TreeMap<>();
-	private final Map<Block, Integer> prunedBlockIdxes = new HashMap<>();
-	Block curBlock;
+	/**
+	 * Add lines to BasicBlock
+	 *
+	 * @param lines		lines that in code of BasicBlock to be added
+	 */
+	void addAllLines(List<String> lines) {
+		if(!isEnd)
+			this.lines.addAll(lines);
+	}
+
+
+	/** Constructors */
+
+	BasicBlock() {
+
+	}
+
+	BasicBlock(int number) {
+		name = Integer.toString(number);
+	}
+
+	BasicBlock(String name) {
+		this.name = name;
+	}
+
+
+	/** Getters and Setters */
+
+	void setName(Integer number) {
+		if(number == null)
+			this.name = null;
+		else
+			this.name = Integer.toString(number);
+	}
+
+	String getName() {
+		return name;
+	}
+
+
+	List<String> getLines() {
+		return lines;
+	}
+
+
+	void setAsEndBlock() {
+		isEnd = true;
+	}
+
+	boolean isEnd() {
+		return isEnd;
+	}
+
+
+	void setThenBlock(BasicBlock block) {
+		thenBlock = block;
+	}
+
+	BasicBlock getThenBlock() {
+		return thenBlock;
+	}
+
+
+	void setElseBlock(BasicBlock block) {
+		elseBlock = block;
+	}
+
+	BasicBlock getElseBlock() {
+		return elseBlock;
+	}
+
+
+	void setLoopEndBlock(BasicBlock block) {
+		loopEndBlock = block;
+	}
+
+	BasicBlock getLoopEndBlock() {
+		return loopEndBlock;
+	}
+}
+
+
+class CFG {
+	private final BasicBlock entryBlock;
+	private final BasicBlock exitBlock;
+	private final Map<Integer, BasicBlock> blocks = new TreeMap<>();
+	private final Map<BasicBlock, Integer> prunedBlockIdxes = new HashMap<>();
+	BasicBlock curBlock;
 
 	private final String funcName;
 	final List<String> retType = new ArrayList<>();
 	final List<String> args = new ArrayList<>();
 
 	private Integer nextBlockId = 0;
-	private final Stack<Block> pastBlocks = new Stack<>();
-	private final Stack<Block> endBlocks = new Stack<>();
+	private final Stack<BasicBlock> pastBlocks = new Stack<>();
+	private final Stack<BasicBlock> endBlocks = new Stack<>();
 
 	CFG(String funcName) {
 		this.funcName = funcName;
-		entryBlock = new Block("entry");
-		exitBlock = new Block("exit");
+		entryBlock = new BasicBlock("entry");
+		exitBlock = new BasicBlock("exit");
 		curBlock = entryBlock;
 		endBlocks.push(exitBlock);
 		addBlock(false);
 	}
 
 	public void addBlock(boolean isEndBlock) {
-		if(curBlock.isEnd) return;
-		Block pastBlock = curBlock;
-		curBlock = new Block(nextBlockId);
+		if(curBlock.isEnd()) return;
+		BasicBlock pastBlock = curBlock;
+		curBlock = new BasicBlock(nextBlockId);
 
         pastBlock.succs.remove(endBlocks.peek());
 		endBlocks.peek().preds.remove(pastBlock);
@@ -118,9 +183,9 @@ class CFG {
 	}
 
 	public boolean addEndBlock() {
-		if(curBlock.isEnd) return true;
-		Block pastBlock = curBlock;
-		curBlock = new Block();
+		if(curBlock.isEnd()) return true;
+		BasicBlock pastBlock = curBlock;
+		curBlock = new BasicBlock();
 
 		pastBlock.succs.remove(endBlocks.peek());
 		endBlocks.peek().preds.remove(pastBlock);
@@ -164,23 +229,23 @@ class CFG {
 	}
 
 	public void changeSuccsToExit() {
-		for(Block succs : curBlock.succs) {
+		for(BasicBlock succs : curBlock.succs) {
 			succs.preds.remove(curBlock);
 		}
 		curBlock.succs.clear();
 		curBlock.succs.add(exitBlock);
 		exitBlock.preds.add(curBlock);
-		curBlock.isEnd = true;
+		curBlock.setAsEndBlock();
 	}
 
 	public void pruning() {
 		// Delete unreachable codes
-		Set<Block> reachedBlocks = new HashSet<>();
+		Set<BasicBlock> reachedBlocks = new HashSet<>();
 		reachedBlocks.add(blocks.get(0));
-		for(Block block : blocks.values()) {
+		for(BasicBlock block : blocks.values()) {
 			if(!reachedBlocks.contains(block)) {
 				block.setName(null);
-				for(Block succs : block.succs) {
+				for(BasicBlock succs : block.succs) {
 					succs.preds.remove(block);
 				}
 				continue;
@@ -188,11 +253,11 @@ class CFG {
             reachedBlocks.addAll(block.succs);
 		}
 
-		// Delete Empty Line Block
-		for(Block block : blocks.values()) {
+		// Delete Empty Line BasicBlock
+		for(BasicBlock block : blocks.values()) {
 			if(block.getName() == null) continue;
-			if(block.lines.isEmpty()) {
-				for(Block preds : block.preds) {
+			if(block.getLines().isEmpty()) {
+				for(BasicBlock preds : block.preds) {
 					if(preds.getThenBlock() == block) {
 						preds.setThenBlock(block.succs.iterator().next());
 					}
@@ -205,7 +270,7 @@ class CFG {
 					preds.succs.remove(block);
                     preds.succs.addAll(block.succs);
 				}
-				for(Block succs : block.succs) {
+				for(BasicBlock succs : block.succs) {
 					succs.preds.remove(block);
 					succs.preds.addAll(block.preds);
 				}
@@ -214,19 +279,19 @@ class CFG {
 		}
 
 		// Merging blocks
-		for(Block block : blocks.values()) {
+		for(BasicBlock block : blocks.values()) {
 			if(block.getName() == null) continue;
 
 			while(true) {
 				if(block.succs.size() != 1) break;
 
-				Block nxt = block.succs.iterator().next();
+				BasicBlock nxt = block.succs.iterator().next();
 				if (nxt.preds.size() != 1 || nxt.getName().equals("exit")) break;
 
-				block.lines.addAll(nxt.lines);
+				block.addAllLines(nxt.getLines());
 
 				block.succs.remove(nxt);
-				for (Block nnxt : nxt.succs) {
+				for (BasicBlock nnxt : nxt.succs) {
 					nnxt.preds.remove(nxt);
 					nnxt.preds.add(block);
 					block.succs.add(nnxt);
@@ -242,13 +307,13 @@ class CFG {
 
 		// Renaming block Ids
 		int idx = 0;
-		for(Block block : blocks.values()) {
+		for(BasicBlock block : blocks.values()) {
 			if(block.getName() == null) continue;
 			prunedBlockIdxes.put(block, idx++);
 		}
 	}
 
-	private String getBlockName(Block block) {
+	private String getBlockName(BasicBlock block) {
 		String name = block.getName();
 		if(name == null) {
 			return null;
@@ -276,7 +341,7 @@ class CFG {
 		return lenStmt;
 	}
 
-	private List<String> getSortedBlocks(LinkedHashSet<Block> blocks) {
+	private List<String> getSortedBlocks(LinkedHashSet<BasicBlock> blocks) {
 		return blocks.stream()
 				.sorted((a, b) -> {
 					String nameA = a.getName();
@@ -299,7 +364,7 @@ class CFG {
 				.collect(Collectors.toList());
 	}
 
-	private void printPredsSuccs(Block block) {
+	private void printPredsSuccs(BasicBlock block) {
 		String preds = String.join(", ", getSortedBlocks(block.preds));
 
 		System.out.print("Predecessors: ");
@@ -320,7 +385,7 @@ class CFG {
 		System.out.println();
 	}
 
-	private void printBlock(Block block) {
+	private void printBlock(BasicBlock block) {
 		String blockName = getBlockName(block);
 		if(blockName == null) return;
 
@@ -329,19 +394,19 @@ class CFG {
 
 		System.out.println("@" + blockName + " {");
 //		System.out.println(block.getLoopEndBlock() == null);
-		// Print lines that in Block
+		// Print lines that in BasicBlock
 		int len = 4;
 		int stmtNum = 0;
 		boolean stmt = false;
 		boolean doPrintCompountStmt = false;
 
-		for(String line : block.lines) {
+		for(String line : block.getLines()) {
 			if(line.equals("if") || line.equals("for") || line.equals("while")) {
 				stmtNum++;
 			}
 		}
 
-		for (String line : block.lines) {
+		for (String line : block.getLines()) {
 			if(line.equals("if") || line.equals("for") || line.equals("while")) {
 				stmtNum--;
 				if(stmtNum == 0) {
@@ -415,7 +480,7 @@ class CFG {
 		System.out.println("}");
 		printPredsSuccs(entryBlock);
 
-		for(Block block : blocks.values()) {
+		for(BasicBlock block : blocks.values()) {
 			printBlock(block);
 		}
 		printBlock(exitBlock);
@@ -555,7 +620,7 @@ class CFAVisitor extends simpleCBaseVisitor<Void> {
 
 		curCFG.moveTopPast();
 
-		CFG.Block ifBlock = curCFG.curBlock;
+		BasicBlock ifBlock = curCFG.curBlock;
 		curCFG.addBlock(false);
 		ifBlock.setThenBlock(curCFG.curBlock);
 		if(ctx.stmt(0).getChild(0) instanceof simpleCParser.CompoundStmtContext) {
@@ -597,7 +662,7 @@ class CFAVisitor extends simpleCBaseVisitor<Void> {
 			return null;
 		}
 
-		CFG.Block whileBlock = curCFG.curBlock;
+		BasicBlock whileBlock = curCFG.curBlock;
 		curCFG.addBlock(false);
 		whileBlock.setLoopEndBlock(curCFG.curBlock);
 		return null;
@@ -637,7 +702,7 @@ class CFAVisitor extends simpleCBaseVisitor<Void> {
 		curCFG.moveTopPastWithDeletion();
 		curCFG.moveTopEndWithDeletion();
 		curCFG.moveTopEndWithDeletion();
-		CFG.Block forBlock = curCFG.curBlock;
+		BasicBlock forBlock = curCFG.curBlock;
 		curCFG.addBlock(false);
 		forBlock.setLoopEndBlock(curCFG.curBlock);
 		return null;
