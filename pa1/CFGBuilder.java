@@ -144,10 +144,10 @@ class CFG {
 	private final String funcName;
 
 	// return type
-	final List<String> retType = new ArrayList<>();
+	private final List<String> retType = new ArrayList<>();
 
 	// arguments
-	final List<String> args = new ArrayList<>();
+	private final List<String> args = new ArrayList<>();
 
 
 	/** BasicBlocks in CFG */
@@ -193,7 +193,7 @@ class CFG {
 		addBasicBlock();
 	}
 
-	/** Methods to manipulate BasicBlocks in CFG */
+	/* Methods to manipulate BasicBlocks in CFG */
 
 	/**
 	 * Create the next BasicBlock and link it with the current BasicBlock
@@ -305,10 +305,17 @@ class CFG {
 	}
 
 
-	/** Pruning and Printing Methods */
+	/* Pruning and Printing Methods */
 
+	/**
+	 * Pruning the CFG:
+	 * 1. Delete unreachable codes
+	 * 2. Delete Empty Line BasicBlock
+	 * 3. Merging blocks
+	 * 4. Renaming block Ids
+	 */
 	public void pruning() {
-		// Delete unreachable codes
+		// 1. Delete unreachable codes
 		Set<BasicBlock> reachedBlocks = new HashSet<>();
 		reachedBlocks.add(blocks.get(0));
 		for(BasicBlock block : blocks.values()) {
@@ -322,7 +329,7 @@ class CFG {
             reachedBlocks.addAll(block.succs);
 		}
 
-		// Delete Empty Line BasicBlock
+		// 2. Delete Empty Line BasicBlock
 		for(BasicBlock block : blocks.values()) {
 			if(block.getName() == null) continue;
 			if(block.getLines().isEmpty()) {
@@ -347,7 +354,7 @@ class CFG {
 			}
 		}
 
-		// Merging blocks
+		// 3. Merging blocks
 		for(BasicBlock block : blocks.values()) {
 			if(block.getName() == null) continue;
 
@@ -374,7 +381,7 @@ class CFG {
 			}
 		}
 
-		// Renaming block Ids
+		// 4. Renaming block Ids
 		int idx = 0;
 		for(BasicBlock block : blocks.values()) {
 			if(block.getName() == null) continue;
@@ -382,6 +389,11 @@ class CFG {
 		}
 	}
 
+	/**
+	 * Get the name of a BasicBlock after pruning
+	 * @param block		BasicBlock to get name
+	 * @return			name of BasicBlock after pruning
+	 */
 	private String getBlockName(BasicBlock block) {
 		String name = block.getName();
 		if(name == null) {
@@ -395,21 +407,21 @@ class CFG {
 		}
 	}
 
-	private int printLine(List<String> lines) {
-		int lenStmt = 4;
-		boolean stmt = false;
+	/**
+	 * Print a list of lines
+	 * @param lines		list of lines to be printed
+	 */
+	private void printLine(List<String> lines) {
 		for (String line : lines) {
-			if(line.equals("if") || line.equals("for") || line.equals("while")) {
-				stmt = true;
-			}
 			System.out.print(line);
-
-			if(stmt) lenStmt += line.length();
 		}
-
-		return lenStmt;
 	}
 
+	/**
+	 * Get sorted block names from a set of BasicBlocks
+	 * @param blocks		LinkedHashSet of BasicBlocks
+	 * @return				sorted list of block names
+	 */
 	private List<String> getSortedBlocks(LinkedHashSet<BasicBlock> blocks) {
 		return blocks.stream()
 				.sorted((a, b) -> {
@@ -433,6 +445,10 @@ class CFG {
 				.collect(Collectors.toList());
 	}
 
+	/**
+	 * Print predecessors and successors of a BasicBlock as sorted list
+	 * @param block		BasicBlock to be printed
+	 */
 	private void printPredsSuccs(BasicBlock block) {
 		String preds = String.join(", ", getSortedBlocks(block.preds));
 
@@ -454,13 +470,19 @@ class CFG {
 		System.out.println();
 	}
 
+	/**
+	 * Print a BasicBlock
+	 * @param block		BasicBlock to be printed
+	 */
 	private void printBlock(BasicBlock block) {
 		String blockName = getBlockName(block);
 		if(blockName == null) return;
 
+		// check if block and for/while block
 		boolean doHaveThenBlock = block.getThenBlock() != null && block.getThenBlock().getName() != null;
 		boolean doHaveLoopEndBlock = block.getLoopEndBlock() != null;
 
+		// Print block header
 		System.out.println("@" + blockName + " {");
 
 		// Print lines that in BasicBlock
@@ -469,13 +491,16 @@ class CFG {
 		boolean stmt = false;
 		boolean doPrintCompountStmt = false;
 
+		// count total if/for/while statements
 		for(String line : block.getLines()) {
 			if(line.equals("if") || line.equals("for") || line.equals("while")) {
 				stmtNum++;
 			}
 		}
 
+		// print lines
 		for (String line : block.getLines()) {
+			// check if last if/for/while statement to print then/else/loop_end block num
 			if(line.equals("if") || line.equals("for") || line.equals("while")) {
 				stmtNum--;
 				if(stmtNum == 0) {
@@ -488,6 +513,7 @@ class CFG {
 				}
 			}
 
+			// print empty compound statement if no then/else block
 			if(line.equals("if") && !stmt) {
 				doPrintCompountStmt = true;
 			}
@@ -501,6 +527,7 @@ class CFG {
 			if(stmt) len += line.length();
 		}
 
+		// print empty compound statement if needed
 		if(doPrintCompountStmt) {
 			System.out.println("{ }");
 		}
@@ -524,18 +551,26 @@ class CFG {
 
 		System.out.println("}");
 
+		// Print preds/succs
 		printPredsSuccs(block);
 	}
 
+	/**
+	 * Print the result of CFG
+	 */
 	public void print() {
+		// Print function header
 		System.out.println("@" + getBlockName(entryBlock) + " {");
 
+		// Print function name
 		System.out.println("   name: " + funcName);
 
+		// Print return type
 		System.out.print("   ret_type: ");
 		printLine(retType);
 		System.out.println();
 
+		// Print arguments
 		System.out.print("   args: ");
 		if(args.isEmpty()) {
 			System.out.print("-");
@@ -545,18 +580,33 @@ class CFG {
 		}
 		System.out.println();
 
-
 		System.out.println("}");
+
+		// Print entry block preds/succs
 		printPredsSuccs(entryBlock);
 
+		// Print all basic blocks
 		for(BasicBlock block : blocks.values()) {
 			printBlock(block);
 		}
+
+		// Print exit block
 		printBlock(exitBlock);
+
 	}
+
+	/** Getters */
 
 	BasicBlock getCurrentBlock() {
 		return curBlock;
+	}
+
+	List<String> getRetType() {
+		return retType;
+	}
+
+	List<String> getArgs() {
+		return args;
 	}
 }
 
@@ -582,7 +632,6 @@ class CFAVisitor extends simpleCBaseVisitor<Void> {
 	private final List<CFG> cfgs = new ArrayList<>();
 	private CFG curCFG = null;
 	private List<String> curLine = null;
-	private int brackets = 0;
 
 	// hash-map:
 	Map<String, Integer> vars = new HashMap<String, Integer>();
@@ -591,6 +640,10 @@ class CFAVisitor extends simpleCBaseVisitor<Void> {
 
 	// add more fields you need …
 
+	/**
+	 * Add a line to current line (global or current block)
+	 * @param str	line to be added
+	 */
 	private void addLine(String str) {
 		if(curLine != null) {
 			curLine.add(str);
@@ -603,6 +656,11 @@ class CFAVisitor extends simpleCBaseVisitor<Void> {
 		}
 	}
 
+	/**
+	 * Visit program, visit declList and funcList, print global and each CFG
+	 * @param ctx the parse tree
+	 * @return    null
+	 */
 	@Override
 	public Void visitProgram(simpleCParser.ProgramContext ctx) {
 		System.out.println("/*--- program: " + CFGBuilder.inputFile + " ---*/");
@@ -621,26 +679,35 @@ class CFAVisitor extends simpleCBaseVisitor<Void> {
 		return null;
 	}
 
+	/**
+	 * Visit function, create new CFG for each function
+	 * @param ctx the parse tree
+	 * @return    null
+	 */
 	@Override
 	public Void visitFunction(simpleCParser.FunctionContext ctx) {
 		String funcName = ctx.ID().getText();
 		curCFG = new CFG(funcName);
 		cfgs.add(curCFG);
 
-		curLine = curCFG.retType;
+		curLine = curCFG.getRetType();
 		visit(ctx.type());
 
-		curLine = curCFG.args;
+		curLine = curCFG.getArgs();
 		if(ctx.paramList() != null) {
 			visit(ctx.paramList());
 		}
 
 		curLine = null;
-		brackets++;
 		visit(ctx.compoundStmt());
 		return null;
 	}
 
+	/**
+	 * Visit declaration list, visit each declaration with indentation and newline
+	 * @param ctx the parse tree
+	 * @return    null
+	 */
 	@Override
 	public Void visitDeclList(simpleCParser.DeclListContext ctx) {
 		for(int i = 0; i < ctx.getChildCount(); i++) {
@@ -651,6 +718,11 @@ class CFAVisitor extends simpleCBaseVisitor<Void> {
 		return null;
 	}
 
+	/**
+	 * Visit assignment statement, add indentation and newline
+	 * @param ctx the parse tree
+	 * @return    null
+	 */
 	@Override
 	public Void visitAssignStmt(simpleCParser.AssignStmtContext ctx) {
 		addLine("    ");
@@ -659,6 +731,11 @@ class CFAVisitor extends simpleCBaseVisitor<Void> {
 		return null;
 	}
 
+	/**
+	 * Visit call statement, add indentation and newline
+	 * @param ctx the parse tree
+	 * @return    null
+	 */
 	@Override
 	public Void visitCallStmt(simpleCParser.CallStmtContext ctx) {
 		addLine("    ");
@@ -667,6 +744,11 @@ class CFAVisitor extends simpleCBaseVisitor<Void> {
 		return null;
 	}
 
+	/**
+	 * Visit statement, add indentation and newline for empty statement
+	 * @param ctx the parse tree
+	 * @return    null
+	 */
 	@Override
 	public Void visitStmt(simpleCParser.StmtContext ctx) {
 		if(ctx.SEMI() != null) {
@@ -679,45 +761,59 @@ class CFAVisitor extends simpleCBaseVisitor<Void> {
 		return null;
 	}
 
+	/**
+	 * Visit if statement, add condition statement and then/else statements
+	 * @param ctx the parse tree
+	 * @return    null
+	 */
 	@Override
 	public Void visitIfStmt(simpleCParser.IfStmtContext ctx) {
+
+		// 1. Add if statement in current block
 		addLine("    ");
 		addLine(ctx.getChild(0).getText());
 		visit(ctx.LPAREN());
 		visit(ctx.expr());
 		visit(ctx.RPAREN());
 
+		// 2. Add Segment Block for then/else statements
 		if(curCFG.addSegmentBlock()) {
 			return null;
 		}
 
+		// 3. Move to if statement
 		curCFG.moveTopPast();
-
 		BasicBlock ifBlock = curCFG.getCurrentBlock();
-		curCFG.addBasicBlock();
 
+		// 4. Add Basic Block for then statement and visit
+		curCFG.addBasicBlock();
 		ifBlock.setThenBlock(curCFG.getCurrentBlock());
-		if(ctx.stmt(0).getChild(0) instanceof simpleCParser.CompoundStmtContext) {
-			brackets++;
-		}
 		visit(ctx.stmt(0));
 
+		// 5. Move back to if statement
 		curCFG.moveTopPast();
+
+		// 6. Add Basic Block for else statement and visit
 		curCFG.addBasicBlock();
 		ifBlock.setElseBlock(curCFG.getCurrentBlock());
 		if(ctx.stmt().size() >= 2) {
-			if(ctx.stmt(1).getChild(0) instanceof simpleCParser.CompoundStmtContext) {
-				brackets++;
-			}
 			visit(ctx.stmt(1));
 		}
 
+		// 7. Move out of scope
 		curCFG.moveOutOfScope();
+
 		return null;
 	}
 
+	/**
+	 * Visit while statement, add condition statement and loop body
+	 * @param ctx the parse tree
+	 * @return	  null
+	 */
 	@Override
 	public Void visitWhileStmt(simpleCParser.WhileStmtContext ctx) {
+		// 1. Add loop block for condition statement
 		if(curCFG.addLoopBlock()) {
 			return null;
 		}
@@ -727,29 +823,39 @@ class CFAVisitor extends simpleCBaseVisitor<Void> {
 		visit(ctx.expr());
 		visit(ctx.RPAREN());
 
+		// 2. Add Basic Block for loop body and visit
 		curCFG.addBasicBlock();
-		if(ctx.stmt().getChild(0) instanceof simpleCParser.CompoundStmtContext) {
-			brackets++;
-		}
 		visit(ctx.stmt());
 
+		// 3. Move out of scope
 		if(curCFG.moveOutOfScope()) {
 			return null;
 		}
 
 		BasicBlock whileBlock = curCFG.getCurrentBlock();
+
+		// 4. Add Basic Block for loop end
 		curCFG.addBasicBlock();
 		whileBlock.setLoopEndBlock(curCFG.getCurrentBlock());
+
 		return null;
 	}
 
+	/**
+	 * Visit for statement, add initialization, condition, update statements and loop body
+	 * @param ctx the parse tree
+	 * @return	  null
+	 */
 	@Override
 	public Void visitForStmt(simpleCParser.ForStmtContext ctx) {
+
+		// 1. initialization statement
 		addLine("    ");
 		visit(ctx.assign(0));
 		visit(ctx.SEMI(0));
 		addLine("\n");
 
+		// 2. Add loop block for condition statement
 		if(curCFG.addLoopBlock()) {
 			return null;
 		}
@@ -761,7 +867,10 @@ class CFAVisitor extends simpleCBaseVisitor<Void> {
 		visit(ctx.SEMI(1));
 		visit(ctx.RPAREN());
 
+		// 3. Add Basic Block for loop body
 		curCFG.addBasicBlock();
+
+		// 4. Add Segment Block for update statement
 		if(curCFG.addSegmentBlock()) {
 			return null;
 		}
@@ -770,20 +879,28 @@ class CFAVisitor extends simpleCBaseVisitor<Void> {
 		visit(ctx.SEMI(0));
 		addLine("\n");
 
+		// 5. Move to loop body and visit
 		curCFG.moveTopPast();
-		if(ctx.stmt().getChild(0) instanceof simpleCParser.CompoundStmtContext) {
-			brackets++;
-		}
 		visit(ctx.stmt());
 
+		// 6. Move out of scope twice
 		curCFG.moveOutOfScope();
 		curCFG.moveOutOfScope();
+
 		BasicBlock forBlock = curCFG.getCurrentBlock();
+
+		// 7. Add Basic Block for loop end
 		curCFG.addBasicBlock();
 		forBlock.setLoopEndBlock(curCFG.getCurrentBlock());
+
 		return null;
 	}
 
+	/**
+	 * Visit compound statement, visit declList and stmtList. Not adding brackets
+	 * @param ctx the parse tree
+	 * @return	  null
+	 */
 	@Override
 	public Void visitCompoundStmt(simpleCParser.CompoundStmtContext ctx) {
 		if(ctx.declList() != null) {
@@ -793,6 +910,11 @@ class CFAVisitor extends simpleCBaseVisitor<Void> {
 		return null;
 	}
 
+	/**
+	 * Visit return statement, add line and change successors to exit block
+	 * @param ctx	the parse tree
+	 * @return 		null
+	 */
 	@Override
 	public Void visitRetStmt(simpleCParser.RetStmtContext ctx) {
 		addLine("    ");
@@ -802,14 +924,17 @@ class CFAVisitor extends simpleCBaseVisitor<Void> {
 		return null;
 	}
 
+	/**
+	 * Visit a terminal node, and add its text to the current line
+	 * @param node 	the terminal node to visit
+	 * @return 		null
+	 */
 	@Override
 	public Void visitTerminal(TerminalNode node) {
 		String t = node.getText();
 		addLine(t + " ");
 		return null;
 	}
-
-	// add more methods you need …
 }
 
 public class CFGBuilder {
