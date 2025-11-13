@@ -153,10 +153,10 @@ class CFG {
 	/** BasicBlocks in CFG */
 
 	// entry block of CFG
-	private final BasicBlock entryBlock;
+	private final BasicBlock entryBlock = new BasicBlock("entry");
 
 	// exit block of CFG
-	private final BasicBlock exitBlock;
+	private final BasicBlock exitBlock = new BasicBlock("exit");
 
 	// all basic blocks in CFG except entry and exit blocks
 	private final Map<Integer, BasicBlock> blocks = new TreeMap<>();
@@ -167,7 +167,7 @@ class CFG {
 	/** Current BasicBlock in CFG */
 
 	// current basic block of CFG
-	private BasicBlock curBlock;
+	private BasicBlock curBlock = entryBlock;
 
 	// stacks for segmented entry blocks
 	private final Stack<BasicBlock> segmentStartBlocks = new Stack<>();
@@ -182,43 +182,35 @@ class CFG {
 	private final Map<BasicBlock, Integer> prunedBlockIdxes = new HashMap<>();
 
 
-
+	/**
+	 * Constructor of CFG
+	 * Mark as Exit Block to End Block; add Block 0
+	 * @param funcName	function name
+	 */
 	CFG(String funcName) {
 		this.funcName = funcName;
-		entryBlock = new BasicBlock("entry");
-		exitBlock = new BasicBlock("exit");
-		curBlock = entryBlock;
 		segmentEndBlocks.push(exitBlock);
-		addBlock(false);
+		addBasicBlock();
 	}
 
-	public void addBlock(boolean isEndBlock) {
-		if(curBlock.isEnd()) return;
+	/** Methods to manipulate BasicBlocks in CFG */
+
+	/**
+	 * Create the next BasicBlock and link it with the current BasicBlock
+	 * @param putInBlocks	whether to put the created BasicBlock into blocks map
+	 * @return				the past BasicBlock before creating the next BasicBlock
+	 */
+	private BasicBlock createNextBlock(boolean putInBlocks) {
+		if(curBlock.isEnd()) return null;
+
 		BasicBlock pastBlock = curBlock;
-		curBlock = new BasicBlock(nextBlockId);
 
-        pastBlock.succs.remove(segmentEndBlocks.peek());
-		segmentEndBlocks.peek().preds.remove(pastBlock);
-
-		pastBlock.succs.add(curBlock);
-		curBlock.preds.add(pastBlock);
-
-		curBlock.succs.add(segmentEndBlocks.peek());
-		segmentEndBlocks.peek().preds.add(curBlock);
-
-		blocks.put(nextBlockId, curBlock);
-		nextBlockId++;
-
-		if(isEndBlock) {
-			segmentStartBlocks.push(curBlock);
-			segmentEndBlocks.push(curBlock);
+		if(putInBlocks) {
+			curBlock = new BasicBlock(nextBlockId);
 		}
-	}
-
-	public boolean addEndBlock() {
-		if(curBlock.isEnd()) return true;
-		BasicBlock pastBlock = curBlock;
-		curBlock = new BasicBlock();
+		else {
+			curBlock = new BasicBlock();
+		}
 
 		pastBlock.succs.remove(segmentEndBlocks.peek());
 		segmentEndBlocks.peek().preds.remove(pastBlock);
@@ -229,30 +221,68 @@ class CFG {
 		curBlock.succs.add(segmentEndBlocks.peek());
 		segmentEndBlocks.peek().preds.add(curBlock);
 
+		if(putInBlocks) {
+			blocks.put(nextBlockId, curBlock);
+			nextBlockId++;
+		}
+
+		return pastBlock;
+	}
+
+	/**
+	 * Add a basic block after the current basic block
+	 */
+	public void addBasicBlock() {
+		createNextBlock(true);
+	}
+
+	/**
+	 * Add a loop block after the current basic block
+	 * @return	true if failed to add loop block
+	 */
+	public boolean addLoopBlock() {
+		BasicBlock pastBlock = createNextBlock(true);
+		if(pastBlock == null) return true;
+
 		segmentStartBlocks.push(curBlock);
+		segmentEndBlocks.push(curBlock);
+		return false;
+	}
+
+	/**
+	 * Add a segment block after the current basic block
+	 * @return	true if failed to add segment block
+	 */
+	public boolean addSegmentBlock() {
+		BasicBlock pastBlock = createNextBlock(false);
+		if(pastBlock == null) return true;
+
 		segmentStartBlocks.push(pastBlock);
 		segmentEndBlocks.push(curBlock);
 		return false;
 	}
 
+
+	/**
+	 * Move current block to the top segment start block
+	 */
 	public void moveTopPast() {
 		curBlock = segmentStartBlocks.peek();
 	}
 
-	public boolean moveTopPastWithDeletion() {
-		if(segmentStartBlocks.empty()) return true;
-		curBlock = segmentStartBlocks.pop();
-		return false;
-	}
-
-	public boolean moveTopEndWithDeletion() {
-		if(segmentStartBlocks.empty() || segmentEndBlocks.empty() || segmentStartBlocks.peek() != segmentEndBlocks.peek()) {
+	/**
+	 * Move out of the current segment scope
+	 * @return	true if no segment to move out
+	 */
+	public boolean moveOutOfScope() {
+		if(segmentStartBlocks.empty() || segmentEndBlocks.empty()) {
 			return true;
 		}
 
 		curBlock = segmentEndBlocks.peek();
 		segmentEndBlocks.pop();
 		segmentStartBlocks.pop();
+
 		if(curBlock.getName() == null) {
 			curBlock.setName(nextBlockId);
 			blocks.put(nextBlockId, curBlock);
@@ -261,6 +291,9 @@ class CFG {
 		return false;
 	}
 
+	/**
+	 * Change all successors of current block to exit block
+	 */
 	public void changeSuccsToExit() {
 		for(BasicBlock succs : curBlock.succs) {
 			succs.preds.remove(curBlock);
@@ -270,6 +303,9 @@ class CFG {
 		exitBlock.preds.add(curBlock);
 		curBlock.setAsEndBlock();
 	}
+
+
+	/** Pruning and Printing Methods */
 
 	public void pruning() {
 		// Delete unreachable codes
@@ -426,7 +462,7 @@ class CFG {
 		boolean doHaveLoopEndBlock = block.getLoopEndBlock() != null;
 
 		System.out.println("@" + blockName + " {");
-//		System.out.println(block.getLoopEndBlock() == null);
+
 		// Print lines that in BasicBlock
 		int len = 4;
 		int stmtNum = 0;
@@ -651,14 +687,15 @@ class CFAVisitor extends simpleCBaseVisitor<Void> {
 		visit(ctx.expr());
 		visit(ctx.RPAREN());
 
-		if(curCFG.addEndBlock()) {
+		if(curCFG.addSegmentBlock()) {
 			return null;
 		}
 
 		curCFG.moveTopPast();
 
 		BasicBlock ifBlock = curCFG.getCurrentBlock();
-		curCFG.addBlock(false);
+		curCFG.addBasicBlock();
+
 		ifBlock.setThenBlock(curCFG.getCurrentBlock());
 		if(ctx.stmt(0).getChild(0) instanceof simpleCParser.CompoundStmtContext) {
 			brackets++;
@@ -666,7 +703,7 @@ class CFAVisitor extends simpleCBaseVisitor<Void> {
 		visit(ctx.stmt(0));
 
 		curCFG.moveTopPast();
-		curCFG.addBlock(false);
+		curCFG.addBasicBlock();
 		ifBlock.setElseBlock(curCFG.getCurrentBlock());
 		if(ctx.stmt().size() >= 2) {
 			if(ctx.stmt(1).getChild(0) instanceof simpleCParser.CompoundStmtContext) {
@@ -675,32 +712,33 @@ class CFAVisitor extends simpleCBaseVisitor<Void> {
 			visit(ctx.stmt(1));
 		}
 
-		curCFG.moveTopPastWithDeletion();
-		curCFG.moveTopEndWithDeletion();
+		curCFG.moveOutOfScope();
 		return null;
 	}
 
 	@Override
 	public Void visitWhileStmt(simpleCParser.WhileStmtContext ctx) {
-		curCFG.addBlock(true);
+		if(curCFG.addLoopBlock()) {
+			return null;
+		}
 		addLine("    ");
 		addLine(ctx.getChild(0).getText());
 		visit(ctx.LPAREN());
 		visit(ctx.expr());
 		visit(ctx.RPAREN());
 
-		curCFG.addBlock(false);
+		curCFG.addBasicBlock();
 		if(ctx.stmt().getChild(0) instanceof simpleCParser.CompoundStmtContext) {
 			brackets++;
 		}
 		visit(ctx.stmt());
 
-		if(curCFG.moveTopEndWithDeletion()) {
+		if(curCFG.moveOutOfScope()) {
 			return null;
 		}
 
 		BasicBlock whileBlock = curCFG.getCurrentBlock();
-		curCFG.addBlock(false);
+		curCFG.addBasicBlock();
 		whileBlock.setLoopEndBlock(curCFG.getCurrentBlock());
 		return null;
 	}
@@ -712,7 +750,9 @@ class CFAVisitor extends simpleCBaseVisitor<Void> {
 		visit(ctx.SEMI(0));
 		addLine("\n");
 
-		curCFG.addBlock(true);
+		if(curCFG.addLoopBlock()) {
+			return null;
+		}
 		addLine("    ");
 		addLine(ctx.getChild(0).getText());
 		visit(ctx.LPAREN());
@@ -721,8 +761,8 @@ class CFAVisitor extends simpleCBaseVisitor<Void> {
 		visit(ctx.SEMI(1));
 		visit(ctx.RPAREN());
 
-		curCFG.addBlock(false);
-		if(curCFG.addEndBlock()) {
+		curCFG.addBasicBlock();
+		if(curCFG.addSegmentBlock()) {
 			return null;
 		}
 		addLine("    ");
@@ -736,11 +776,10 @@ class CFAVisitor extends simpleCBaseVisitor<Void> {
 		}
 		visit(ctx.stmt());
 
-		curCFG.moveTopPastWithDeletion();
-		curCFG.moveTopEndWithDeletion();
-		curCFG.moveTopEndWithDeletion();
+		curCFG.moveOutOfScope();
+		curCFG.moveOutOfScope();
 		BasicBlock forBlock = curCFG.getCurrentBlock();
-		curCFG.addBlock(false);
+		curCFG.addBasicBlock();
 		forBlock.setLoopEndBlock(curCFG.getCurrentBlock());
 		return null;
 	}
