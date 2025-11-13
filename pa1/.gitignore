@@ -1,0 +1,4 @@
+build/
+cfg.out
+.idea/
+*.iml
